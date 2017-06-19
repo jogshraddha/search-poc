@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Vistalytics</title>
+    <link rel="stylesheet" type="text/css" href="node_modules/bootstrap/dist/css/bootstrap.css">
+</head>
+<body ng-app="ExampleApp">
+<!-- attach the ExampleController to our main content -->
+<div ng-controller="ExampleController" class="container">
+    <h1 style="text-align: center">Vistalytics</h1>
+
+    <!-- if there is an error, display its message -->
+    <div ng-if="error" class="alert alert-danger" role="alert">{{error.message}}</div>
+    <div class="row">
+        <div class="col-md-6 col-md-offset-3">
+            <div class="input-group">
+                <input type="text" ng-model="searchText" class="form-control" placeholder="Search...">
+                <span class="input-group-btn" ng-click="onSearch()">
+        <button class="btn btn-default" type="button">Go!</button>
+      </span>
+            </div><!-- /input-group -->
+        </div><!-- /.col-lg-6 -->
+    </div><!-- /.row -->
+    <br>
+    <div class="col-lg-12">
+        <div class="col-md-6 col-md-offset-3">
+            <div ng-if="hits" ng-repeat="hit in hits" class="row panel panel-default">
+                <div class="panel-heading">
+                    <h3 class="panel-title">Document {{hit._id}}</h3>
+                </div>
+                <div class="panel-body" ng-repeat="result in hit.highlight">
+                    <div ng-repeat="(key, value) in result">
+                        <a href="" ng-click="onTextClick($event, hit._id, searchText)">{{value}}</a>
+                        <hr>
+                        <!--<pre style="white-space: normal" ng-bind-html="highlight(value, hit._id)"></pre>-->
+                    </div>
+                    <!--<div ng-repeat="data in result">
+                        <pre style="white-space: normal"><div compile="highlight(data, hit._id)"></div></pre>
+                    </div>-->
+                </div>
+            </div>
+            <div ng-if="!hits">
+                No results found
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- include npm modules in proper order -->
+<script src="node_modules/angular/angular.min.js"></script>
+<script src="node_modules/elasticsearch-browser/elasticsearch.angular.min.js"></script>
+<script src="node_modules/jquery/dist/jquery.js"></script>
+<script src="node_modules/bootstrap/dist/js/bootstrap.js"></script>
+
+<!-- app code starts is here -->
+<script>
+    var ExampleApp = angular.module('ExampleApp', ['elasticsearch']);
+
+    ExampleApp.service('client', function (esFactory) {
+        return esFactory({
+            host: 'localhost:9200',
+            log: 'trace'
+        });
+    });
+
+    ExampleApp.controller('ExampleController', function ($scope, $sce,client, esFactory) {
+        $scope.onSearch = function(){
+            $scope.hits = null;
+            var searchedWord = $scope.searchText;
+            console.log(searchedWord);
+            client.search({
+                index: 'vista-text',
+                type: 'text-files',
+                body: {
+                    query: {
+                        match_phrase: {
+                            "attachment.content": searchedWord
+                        }
+                    },
+                    highlight : {
+                        order : "score",
+                        fields : {
+                            "attachment.content" : {}
+                        }
+                    }
+                }
+            }).then(function (resp) {
+                if(resp.hits.hits.length > 0)
+                    $scope.hits = resp.hits.hits;
+            }, function (err) {
+                console.trace(err.message);
+            });
+        };
+        $scope.onTextClick = function (event, id, searchedWord) {
+            client.search({
+                index: 'vista-text',
+                type: 'text-files',
+                body: {
+                    "_source": false,
+                    query: {
+                        "bool": {
+                            "must": [
+                                {"terms": {"_id":[id]}}
+                            ],
+                            "should":
+                                { "match": {"attachment.content":searchedWord}}
+                        }
+                    },
+                    "highlight" : {
+                        "fields" : {
+                            "attachment.content" : {
+                                "number_of_fragments" : 0
+                            }
+                        }
+                    }
+                }
+            }).then(function (resp) {
+                var content = resp.hits.hits[0].highlight["attachment.content"][0];
+                var highlighted_text = $scope.highlight(content, searchedWord);
+                window.open('about:blank').document.body.innerHTML = highlighted_text;
+            }, function (err) {
+                console.trace(err.message);
+            });
+        };
+        $scope.highlight = function(haystack, searchText) {
+            var text = haystack.replace("<em>", "");
+            var needle = searchText;
+            if(!needle) {
+                return $sce.trustAsHtml(haystack);
+            }
+            return $sce.trustAsHtml(text.replace(new RegExp(needle, "gi"), function(match) {
+                console.log(match);
+                return '<mark>' + match + '</mark>';
+            }));
+        };
+    });
+</script>
+</body>
+</html>
