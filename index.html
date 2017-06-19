@@ -108,6 +108,8 @@
                         }
                     },
                     "highlight" : {
+                        "pre_tags":"<mark>",
+                        "post_tags":"</mark>",
                         "fields" : {
                             "attachment.content" : {
                                 "number_of_fragments" : 0
@@ -117,13 +119,13 @@
                 }
             }).then(function (resp) {
                 var content = resp.hits.hits[0].highlight["attachment.content"][0];
-                var highlighted_text = $scope.highlight(content, searchedWord);
-                window.open('about:blank').document.body.innerHTML = highlighted_text;
+                //var highlighted_text = $scope.highlight(content, searchedWord);
+                window.open('about:blank').document.body.innerHTML = content;
             }, function (err) {
                 console.trace(err.message);
             });
         };
-        $scope.highlight = function(haystack, searchText) {
+        /*$scope.highlight = function(haystack, searchText) {
             var text = haystack.replace("<em>", "");
             var needle = searchText;
             if(!needle) {
@@ -133,7 +135,7 @@
                 console.log(match);
                 return '<mark>' + match + '</mark>';
             }));
-        };
+        };*/
     });
 </script>
 </body>
