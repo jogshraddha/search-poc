@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <title>Vistalytics</title>
     <link rel="stylesheet" type="text/css" href="node_modules/bootstrap/dist/css/bootstrap.css">
+    <style>
+        mark, .mark{
+            background-color: yellow !important;
+        }
+    </style>
 </head>
 <body ng-app="ExampleApp">
 <!-- attach the ExampleController to our main content -->
@@ -31,7 +36,7 @@
                 </div>
                 <div class="panel-body" ng-repeat="result in hit.highlight">
                     <div ng-repeat="(key, value) in result">
-                        <a href="" ng-click="onTextClick($event, hit._id, searchText)">{{value}}</a>
+                        <a href="" ng-click="onTextClick($index, $event, hit._id, searchText)">{{value}}</a>
                         <hr>
                         <!--<pre style="white-space: normal" ng-bind-html="highlight(value, hit._id)"></pre>-->
                     </div>
@@ -44,6 +49,23 @@
                 No results found
             </div>
         </div>
+    </div>
+    <div class="modal fade" id="htmlModal" tabindex="-1" role="dialog" aria-labelledby="myModal2Label" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                    <h4 class="modal-title" id="myModal2Label">Modal title</h4>
+                </div>
+                <div class="modal-body">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+            <!-- /.modal-content -->
+        </div>
+        <!-- /.modal-dialog -->
     </div>
 </div>
 
@@ -64,24 +86,34 @@
         });
     });
 
-    ExampleApp.controller('ExampleController', function ($scope, $sce,client, esFactory) {
+    ExampleApp.controller('ExampleController', function ($scope, $sce, client) {
+        $scope.bindmodalEvent = true;
+        $scope.indexName = "vistalytics";
+        $scope.indexType = "ALPHAENERGYINC";
+        $scope.field = "xmlLine";
+//        $scope.indexName = "vista-text";
+//        $scope.indexType = "text-files";
+//        $scope.field = "attachment.content";
         $scope.onSearch = function(){
             $scope.hits = null;
             var searchedWord = $scope.searchText;
             console.log(searchedWord);
             client.search({
-                index: 'vista-text',
-                type: 'text-files',
+                index: $scope.indexName,
+                type: $scope.indexType,
                 body: {
                     query: {
                         match_phrase: {
-                            "attachment.content": searchedWord
+                            [$scope.field]: searchedWord
                         }
                     },
                     highlight : {
                         order : "score",
+                        require_field_match: false,
                         fields : {
-                            "attachment.content" : {}
+                            [$scope.field] : {
+                                "fragmenter": "simple"
+                            }
                         }
                     }
                 }
@@ -92,10 +124,11 @@
                 console.trace(err.message);
             });
         };
-        $scope.onTextClick = function (event, id, searchedWord) {
+
+        $scope.onTextClick = function (index, event, id, searchedWord) {
             client.search({
-                index: 'vista-text',
-                type: 'text-files',
+                index: $scope.indexName,
+                type: $scope.indexType,
                 body: {
                     "_source": false,
                     query: {
@@ -104,38 +137,65 @@
                                 {"terms": {"_id":[id]}}
                             ],
                             "should":
-                                { "match": {"attachment.content":searchedWord}}
+                                { "match": {[$scope.field]: searchedWord}}
                         }
                     },
                     "highlight" : {
                         "pre_tags":"<mark>",
                         "post_tags":"</mark>",
                         "fields" : {
-                            "attachment.content" : {
+                            [$scope.field] : {
                                 "number_of_fragments" : 0
                             }
                         }
                     }
                 }
             }).then(function (resp) {
-                var content = resp.hits.hits[0].highlight["attachment.content"][0];
+                var content = resp.hits.hits[0].highlight[$scope.field][0];
                 //var highlighted_text = $scope.highlight(content, searchedWord);
-                window.open('about:blank').document.body.innerHTML = content;
+                console.log(content);
+
+                console.log("resp" + index);
+                $("#htmlModal").modal('show');
+                $("#htmlModal .modal-title").html(id);
+                $("#htmlModal .modal-body").html(content)
+                if ($scope.bindmodalEvent) {
+                    $("#htmlModal").on('shown.bs.modal', function () {
+                        var element = "mark";
+                        var container = $("#htmlModal"),
+                            scrollTo = $($(element)[index]);
+                        console.log('shown.bs.modal', index);
+                        var scrollPosition = scrollTo.offset().top - container.offset().top + container.scrollTop();
+                        container.animate({
+                            scrollTop: scrollPosition
+                        });
+                    });
+
+                    $("#htmlModal").on('hidden.bs.modal', function () {
+                        console.log('hidden.bs.modal', index);
+                        $(this).data('bs.modal', null);
+                    });
+                    $scope.bindmodalEvent = false;
+                }
+//                window.open('about:blank').document.body.innerHTML = highlighted_text;
             }, function (err) {
                 console.trace(err.message);
             });
         };
-        /*$scope.highlight = function(haystack, searchText) {
-            var text = haystack.replace("<em>", "");
+        $scope.highlight = function(haystack, searchText) {
+            var count = 0;
             var needle = searchText;
             if(!needle) {
                 return $sce.trustAsHtml(haystack);
             }
-            return $sce.trustAsHtml(text.replace(new RegExp(needle, "gi"), function(match) {
-                console.log(match);
-                return '<mark>' + match + '</mark>';
+            return $sce.trustAsHtml(haystack.replace(new RegExp(needle, "gi"), function(match) {
+                var id = "mark"+count;
+                count++;
+//                console.log(match, id);
+                //return $sce.trustAsHtml(haystack);
+                return '<span id="'+id+'" class="highlight">' + match + '</span>';
             }));
-        };*/
+        };
     });
 </script>
 </body>
